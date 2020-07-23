@@ -5,11 +5,19 @@
 --
 --  * Empty lines are ignored.
 --
+-- When 'decEscape' is set to 'True':
+--
 --  * Non-escaped fields may contain any characters except
---    double-quotes, commas, carriage returns, and newlines.
+--    double-quotes, delimiters, carriage returns, and newlines.
 --
 --  * Escaped fields may contain any characters (but double-quotes
 --    need to be escaped).
+--
+-- When 'decEscape' is set to 'False':
+--
+--  * Fields are not escaped, and may contain any characters except
+--    delimiters, carriage returns, and newlines. Double-quotes may
+--    appear in fields.
 --
 -- The functions in this module can be used to implement e.g. a
 -- resumable parser that is fed input incrementally.
@@ -57,18 +65,29 @@ import Data.Monoid (mappend, mempty)
 data DecodeOptions = DecodeOptions
     { -- | Field delimiter.
       decDelimiter  :: {-# UNPACK #-} !Word8
+      -- | Whether to escape fields with double quotes (@"@).
+      --
+      -- If 'True', the delimiter can appear in fields surrounded by
+      -- double quotes; to write a double quote character inside an
+      -- escaped field, you must use two double quote characters
+      -- (@""@).
+      --
+      -- If 'False', the delimiter can /never/ appear in fields, but
+      -- double quote characters can.
+    , decEscape     :: !Bool
     } deriving (Eq, Show)
 
 -- | Decoding options for parsing CSV files.
 defaultDecodeOptions :: DecodeOptions
 defaultDecodeOptions = DecodeOptions
     { decDelimiter = 44  -- comma
+    , decEscape    = True
     }
 
 -- | Parse a CSV file that does not include a header.
 csv :: DecodeOptions -> AL.Parser Csv
 csv !opts = do
-    vals <- sepByEndOfLine1' (record (decDelimiter opts))
+    vals <- sepByEndOfLine1' (record (decDelimiter opts) (decEscape opts))
     _ <- optional endOfLine
     endOfInput
     let nonEmpty = removeBlankLines vals
@@ -108,9 +127,9 @@ sepByEndOfLine1' p = liftM2' (:) p loop
 -- | Parse a CSV file that includes a header.
 csvWithHeader :: DecodeOptions -> AL.Parser (Header, V.Vector NamedRecord)
 csvWithHeader !opts = do
-    !hdr <- header (decDelimiter opts)
+    !hdr <- header (decDelimiter opts) (decEscape opts)
     vals <- map (toNamedRecord hdr) . removeBlankLines <$>
-            sepByEndOfLine1' (record (decDelimiter opts))
+            sepByEndOfLine1' (record (decDelimiter opts) (decEscape opts))
     _ <- optional endOfLine
     endOfInput
     let !v = V.fromList vals
@@ -118,13 +137,14 @@ csvWithHeader !opts = do
 
 -- | Parse a header, including the terminating line separator.
 header :: Word8  -- ^ Field delimiter
+       -> Bool   -- ^ Escape
        -> AL.Parser Header
-header !delim = V.fromList <$!> name delim `sepByDelim1'` delim <* endOfLine
+header !delim !escape = V.fromList <$!> name delim escape `sepByDelim1'` delim <* endOfLine
 
 -- | Parse a header name. Header names have the same format as regular
 -- 'field's.
-name :: Word8 -> AL.Parser Name
-name !delim = field delim
+name :: Word8 -> Bool -> AL.Parser Name
+name !delim !escape = field delim escape
 
 removeBlankLines :: [Record] -> [Record]
 removeBlankLines = filter (not . blankLine)
@@ -135,21 +155,30 @@ removeBlankLines = filter (not . blankLine)
 -- most likely want to use the 'endOfLine' parser in combination with
 -- this parser.
 record :: Word8  -- ^ Field delimiter
+       -> Bool   -- ^ Escape
        -> AL.Parser Record
-record !delim = V.fromList <$!> field delim `sepByDelim1'` delim
+record !delim !escape = V.fromList <$!> field delim escape `sepByDelim1'` delim
 {-# INLINE record #-}
 
--- | Parse a field. The field may be in either the escaped or
--- non-escaped format. The return value is unescaped.
-field :: Word8 -> AL.Parser Field
-field !delim = do
+-- | Parse a field. The escape option determines whether fields can be
+-- escaped with double quotes.
+field :: Word8  -- ^ Field delimiter
+      -> Bool   -- ^ Escape
+      -> AL.Parser Field
+field !delim True = fieldEscape delim
+field !delim False = fieldNoEscape delim
+{-# INLINE field #-}
+
+-- | Parse a field that may be in either the escaped or non-escaped
+-- format. The return value is unescaped.
+fieldEscape :: Word8 -> AL.Parser Field
+fieldEscape !delim = do
     mb <- A.peekWord8
     -- We purposely don't use <|> as we want to commit to the first
     -- choice if we see a double quote.
     case mb of
         Just b | b == doubleQuote -> escapedField
         _                         -> unescapedField delim
-{-# INLINE field #-}
 
 escapedField :: AL.Parser S.ByteString
 escapedField = do
@@ -171,6 +200,12 @@ unescapedField !delim = A.takeWhile (\ c -> c /= doubleQuote &&
                                             c /= newline &&
                                             c /= delim &&
                                             c /= cr)
+
+-- | Parse a field that has no escaping.
+fieldNoEscape :: Word8 -> AL.Parser Field
+fieldNoEscape !delim = A.takeWhile (\c -> c /= newline &&
+                                          c /= delim &&
+                                          c /= cr)
 
 dquote :: AL.Parser Char
 dquote = char '"'

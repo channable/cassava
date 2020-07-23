@@ -176,7 +176,7 @@ decodeHeader = decodeHeaderWith defaultDecodeOptions
 decodeHeaderWith :: DecodeOptions -> HeaderParser B.ByteString
 decodeHeaderWith !opts = PartialH (go . parser)
   where
-    parser = A.parse (header $ decDelimiter opts)
+    parser = A.parse $ header (decDelimiter opts) (decEscape opts)
 
     go (A.Fail rest _ msg) = FailH rest err
       where err = "parse error (" ++ msg ++ ")"
@@ -329,7 +329,8 @@ decodeWithP' p !opts = go Incomplete [] . parser
             acc' | blankLine r = acc
                  | otherwise   = let !r' = convert r in r' : acc
 
-    parser = A.parse (record (decDelimiter opts) <* (endOfLine <|> endOfInput))
+    parser = A.parse $
+      record (decDelimiter opts) (decEscape opts) <* (endOfLine <|> endOfInput)
     convert = runParser . p
 {-# INLINE decodeWithP' #-}
 

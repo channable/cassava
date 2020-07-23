@@ -46,6 +46,7 @@ module Data.Csv
     -- ** Encoding and decoding options
     -- $options
     , DecodeOptions(..)
+    , Escaping(..)
     , defaultDecodeOptions
     , decodeWith
     , decodeWithP

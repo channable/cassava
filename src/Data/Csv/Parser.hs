@@ -5,7 +5,7 @@
 --
 --  * Empty lines are ignored.
 --
--- When 'decEscape' is set to 'True':
+-- When 'decEscape' is set to 'Escape':
 --
 --  * Non-escaped fields may contain any characters except
 --    double-quotes, delimiters, carriage returns, and newlines.
@@ -13,7 +13,7 @@
 --  * Escaped fields may contain any characters (but double-quotes
 --    need to be escaped).
 --
--- When 'decEscape' is set to 'False':
+-- When 'decEscape' is set to 'NoEscape':
 --
 --  * Fields are not escaped, and may contain any characters except
 --    delimiters, carriage returns, and newlines. Double-quotes may
@@ -23,6 +23,7 @@
 -- resumable parser that is fed input incrementally.
 module Data.Csv.Parser
     ( DecodeOptions(..)
+    , Escaping (..)
     , defaultDecodeOptions
     , csv
     , csvWithHeader
@@ -51,6 +52,18 @@ import Control.Applicative ((<$>), (*>), (<*), pure)
 import Data.Monoid (mappend, mempty)
 #endif
 
+-- | Whether to escape fields with double quotes (@"@).
+data Escaping
+    = Escape
+      -- ^ Parse possible escaped fields. The delimiter can appear in
+      -- fields surrounded by double quotes; to write a double quote
+      -- character inside an escaped field, you must use two double
+      -- quote characters (@""@).
+    | NoEscape
+      -- ^ Parse fields that are not escaped. The delimiter can
+      -- /never/ appear in fields, but double quote characters can.
+  deriving (Eq, Show)
+
 -- | Options that controls how data is decoded. These options can be
 -- used to e.g. decode tab-separated data instead of comma-separated
 -- data.
@@ -65,23 +78,15 @@ import Data.Monoid (mappend, mempty)
 data DecodeOptions = DecodeOptions
     { -- | Field delimiter.
       decDelimiter  :: {-# UNPACK #-} !Word8
-      -- | Whether to escape fields with double quotes (@"@).
-      --
-      -- If 'True', the delimiter can appear in fields surrounded by
-      -- double quotes; to write a double quote character inside an
-      -- escaped field, you must use two double quote characters
-      -- (@""@).
-      --
-      -- If 'False', the delimiter can /never/ appear in fields, but
-      -- double quote characters can.
-    , decEscape     :: !Bool
+      -- | Whether to escape fields.
+    , decEscape     :: !Escaping
     } deriving (Eq, Show)
 
 -- | Decoding options for parsing CSV files.
 defaultDecodeOptions :: DecodeOptions
 defaultDecodeOptions = DecodeOptions
     { decDelimiter = 44  -- comma
-    , decEscape    = True
+    , decEscape    = Escape
     }
 
 -- | Parse a CSV file that does not include a header.
@@ -136,14 +141,14 @@ csvWithHeader !opts = do
     return (hdr, v)
 
 -- | Parse a header, including the terminating line separator.
-header :: Word8  -- ^ Field delimiter
-       -> Bool   -- ^ Escape
+header :: Word8     -- ^ Field delimiter
+       -> Escaping  -- ^ Escape
        -> AL.Parser Header
 header !delim !escape = V.fromList <$!> name delim escape `sepByDelim1'` delim <* endOfLine
 
 -- | Parse a header name. Header names have the same format as regular
 -- 'field's.
-name :: Word8 -> Bool -> AL.Parser Name
+name :: Word8 -> Escaping -> AL.Parser Name
 name !delim !escape = field delim escape
 
 removeBlankLines :: [Record] -> [Record]
@@ -154,19 +159,19 @@ removeBlankLines = filter (not . blankLine)
 -- CSV file is allowed to not have a terminating line separator. You
 -- most likely want to use the 'endOfLine' parser in combination with
 -- this parser.
-record :: Word8  -- ^ Field delimiter
-       -> Bool   -- ^ Escape
+record :: Word8     -- ^ Field delimiter
+       -> Escaping  -- ^ Escape
        -> AL.Parser Record
 record !delim !escape = V.fromList <$!> field delim escape `sepByDelim1'` delim
 {-# INLINE record #-}
 
 -- | Parse a field. The escape option determines whether fields can be
 -- escaped with double quotes.
-field :: Word8  -- ^ Field delimiter
-      -> Bool   -- ^ Escape
+field :: Word8     -- ^ Field delimiter
+      -> Escaping  -- ^ Escape
       -> AL.Parser Field
-field !delim True = fieldEscape delim
-field !delim False = fieldNoEscape delim
+field !delim Escape = fieldEscape delim
+field !delim NoEscape = fieldNoEscape delim
 {-# INLINE field #-}
 
 -- | Parse a field that may be in either the escaped or non-escaped

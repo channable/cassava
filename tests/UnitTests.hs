@@ -188,7 +188,7 @@ positionalTests =
         ]
     decodeWithTests =
         [ ("tab-delim", defDec { decDelimiter = 9 }, "1\t2", [["1", "2"]])
-        , ("no-escape", defDec { decEscape = False }, "\"a,b\",\"c\nd,e,f\"",
+        , ("no-escape", defDec { decEscape = NoEscape }, "\"a,b\",\"c\nd,e,f\"",
            [["\"a", "b\"", "\"c"], ["d", "e", "f\""]])
         ]
 

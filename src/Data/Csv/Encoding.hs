@@ -22,6 +22,7 @@ module Data.Csv.Encoding
 
     -- ** Encoding and decoding options
     , DecodeOptions(..)
+    , Escaping (..)
     , defaultDecodeOptions
     , decodeWith
     , decodeWithP

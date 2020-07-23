@@ -5,7 +5,7 @@
 --
 --  * Empty lines are ignored.
 --
--- When 'decEscape' is set to 'Escape':
+-- When 'decEscape' is set to 'MaybeEscape':
 --
 --  * Non-escaped fields may contain any characters except
 --    double-quotes, delimiters, carriage returns, and newlines.
@@ -54,8 +54,8 @@ import Data.Monoid (mappend, mempty)
 
 -- | Whether to escape fields with double quotes (@"@).
 data Escaping
-    = Escape
-      -- ^ Parse possible escaped fields. The delimiter can appear in
+    = MaybeEscape
+      -- ^ Parse possibly escaped fields. The delimiter can appear in
       -- fields surrounded by double quotes; to write a double quote
       -- character inside an escaped field, you must use two double
       -- quote characters (@""@).
@@ -86,7 +86,7 @@ data DecodeOptions = DecodeOptions
 defaultDecodeOptions :: DecodeOptions
 defaultDecodeOptions = DecodeOptions
     { decDelimiter = 44  -- comma
-    , decEscape    = Escape
+    , decEscape    = MaybeEscape
     }
 
 -- | Parse a CSV file that does not include a header.
@@ -170,14 +170,14 @@ record !delim !escape = V.fromList <$!> field delim escape `sepByDelim1'` delim
 field :: Word8     -- ^ Field delimiter
       -> Escaping  -- ^ Escape
       -> AL.Parser Field
-field !delim Escape = fieldEscape delim
+field !delim MaybeEscape = fieldMaybeEscape delim
 field !delim NoEscape = fieldNoEscape delim
 {-# INLINE field #-}
 
 -- | Parse a field that may be in either the escaped or non-escaped
 -- format. The return value is unescaped.
-fieldEscape :: Word8 -> AL.Parser Field
-fieldEscape !delim = do
+fieldMaybeEscape :: Word8 -> AL.Parser Field
+fieldMaybeEscape !delim = do
     mb <- A.peekWord8
     -- We purposely don't use <|> as we want to commit to the first
     -- choice if we see a double quote.

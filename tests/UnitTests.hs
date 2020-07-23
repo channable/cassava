@@ -11,6 +11,7 @@ module Main
     ) where
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BL8
 import qualified Data.HashMap.Strict as HM
@@ -188,8 +189,9 @@ positionalTests =
         ]
     decodeWithTests =
         [ ("tab-delim", defDec { decDelimiter = 9 }, "1\t2", [["1", "2"]])
-        , ("no-escape", defDec { decEscape = NoEscape }, "\"a,b\",\"c\nd,e,f\"",
-           [["\"a", "b\"", "\"c"], ["d", "e", "f\""]])
+        , ("no-escape", defDec { decEscape = NoEscape },
+           BL8.map replaceQuote "'a,b','c\nd,e,f'",
+           map (map $ B8.map replaceQuote) [["'a", "b'", "'c"], ["d", "e", "f'"]])
         ]
 
     encodeTest (name, input, expected) =
@@ -210,6 +212,11 @@ positionalTests =
     defEncNoneEnq = defaultEncodeOptions { encQuoting = QuoteNone }
     defEncAllEnq  = defaultEncodeOptions { encQuoting = QuoteAll  }
     defDec = defaultDecodeOptions
+
+    -- Replace single quotes by double quotes.
+    replaceQuote :: Char -> Char
+    replaceQuote '\'' = '"'
+    replaceQuote c = c
 
 nameBasedTests :: [TF.Test]
 nameBasedTests =

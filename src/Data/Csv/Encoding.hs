@@ -152,7 +152,7 @@ decodeWithC :: (DecodeOptions -> AL.Parser a) -> DecodeOptions -> HasHeader
             -> BL8.ByteString -> Either String a
 decodeWithC p !opts hasHeader = decodeWithP' parser
   where parser = case hasHeader of
-            HasHeader -> header (decDelimiter opts) *> p opts
+            HasHeader -> header (decDelimiter opts) (decEscape opts) *> p opts
             NoHeader  -> p opts
 {-# INLINE decodeWithC #-}
 
@@ -384,7 +384,7 @@ csv _parseRecord !opts = do
     return $! V.fromList vals
   where
     records = do
-        !r <- record (decDelimiter opts)
+        !r <- record (decDelimiter opts) (decEscape opts)
         if blankLine r
             then (endOfInput *> pure []) <|> (endOfLine *> records)
             else case runParser (_parseRecord r) of
@@ -398,13 +398,13 @@ csv _parseRecord !opts = do
 csvWithHeader :: (NamedRecord -> Conversion.Parser a) -> DecodeOptions
               -> AL.Parser (Header, V.Vector a)
 csvWithHeader _parseNamedRecord !opts = do
-    !hdr <- header (decDelimiter opts)
+    !hdr <- header (decDelimiter opts) (decEscape opts)
     vals <- records hdr
     let !v = V.fromList vals
     return (hdr, v)
   where
     records hdr = do
-        !r <- record (decDelimiter opts)
+        !r <- record (decDelimiter opts) (decEscape opts)
         if blankLine r
             then (endOfInput *> pure []) <|> (endOfLine *> records hdr)
             else case runParser (convert hdr r) of

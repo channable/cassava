@@ -170,14 +170,14 @@ record !delim !escape = V.fromList <$!> field delim escape `sepByDelim1'` delim
 field :: Word8     -- ^ Field delimiter
       -> Escaping  -- ^ Escape
       -> AL.Parser Field
-field !delim MaybeEscape = fieldMaybeEscape delim
-field !delim NoEscape = fieldNoEscape delim
+field !delim MaybeEscape = maybeEscapedField delim
+field !delim NoEscape = unescapedField delim
 {-# INLINE field #-}
 
 -- | Parse a field that may be in either the escaped or non-escaped
 -- format. The return value is unescaped.
-fieldMaybeEscape :: Word8 -> AL.Parser Field
-fieldMaybeEscape !delim = do
+maybeEscapedField :: Word8 -> AL.Parser Field
+maybeEscapedField !delim = do
     mb <- A.peekWord8
     -- We purposely don't use <|> as we want to commit to the first
     -- choice if we see a double quote.
@@ -200,17 +200,11 @@ escapedField = do
             Left err -> fail err
         else return s
 
+-- | Parse a field that has no escaping.
 unescapedField :: Word8 -> AL.Parser S.ByteString
-unescapedField !delim = A.takeWhile (\ c -> c /= doubleQuote &&
-                                            c /= newline &&
+unescapedField !delim = A.takeWhile (\ c -> c /= newline &&
                                             c /= delim &&
                                             c /= cr)
-
--- | Parse a field that has no escaping.
-fieldNoEscape :: Word8 -> AL.Parser Field
-fieldNoEscape !delim = A.takeWhile (\c -> c /= newline &&
-                                          c /= delim &&
-                                          c /= cr)
 
 dquote :: AL.Parser Char
 dquote = char '"'
